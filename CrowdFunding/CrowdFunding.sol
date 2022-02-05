@@ -28,6 +28,23 @@ contract CrowdFunding{
     uint public raisedAmount;
     uint public noOfContributors;
 
+    struct Request{
+        string description;
+        address payable recipient;
+        uint value;
+        bool completed;
+        uint noOfVoters;
+        mapping(address=>bool) voters;
+    }
+
+    mapping(uint=>Request) public requests;
+    uint public noRequests;
+
+    modifier onlyManager() {
+        require(msg.sender == manager, "Only Manager Can Access");
+        _;
+    }
+
     constructor(uint _target, uint _deadLine, uint _minContribution) {
         target = _target;
         deadLine = _deadLine + block.timestamp;
@@ -62,5 +79,35 @@ contract CrowdFunding{
         contributors[msg.sender]=0;
         require(raisedAmount < contributors[msg.sender], "Refunds Completed");
         raisedAmount-=contributors[msg.sender];
+    }
+
+    function createRequest(string memory _desc, uint _value, address payable _recipient) public onlyManager {
+        Request storage newRequest = requests[noRequests];
+        noRequests++;
+        newRequest.description = _desc;
+        newRequest.recipient = _recipient;
+        newRequest.value = _value;
+        newRequest.completed = false;
+        newRequest.noOfVoters = 0;
+    }
+
+    function voteRequest(uint _requestNo) public {
+        require(contributors[msg.sender] > 0, "Only Contributors can vote");
+        require(noRequests < _requestNo, "Request doesn't exist");
+        Request storage thisRequest = requests[_requestNo];
+        require(thisRequest.voters[msg.sender]==false, "Already voted!");
+        thisRequest.voters[msg.sender] = true;
+        thisRequest.noOfVoters++;
+    }
+
+    function makePayment(uint _requestNo) public onlyManager {
+        require(noRequests < _requestNo, "Request doesn't exist");
+        require(raisedAmount >= target, "Insufficient Balance");
+        Request storage thisRequest = requests[_requestNo];
+        require(thisRequest.completed == false, "The request already completed");
+        require(thisRequest.noOfVoters > noOfContributors/2, "Minimum votes not reached");
+        require(thisRequest.value <= raisedAmount, "Not enough amount raised");
+        thisRequest.recipient.transfer(thisRequest.value);
+        thisRequest.completed = true;
     }
 }
